@@ -10,16 +10,26 @@ type TimeEntry = {
   description: string;
 };
 
+type MaterialEntry = {
+  id: string;
+  supplier: string;
+  date: string;
+  amount: number;
+  description: string;
+};
+
 type Project = {
   id: string;
   name: string;
   offerAmount: number;
   budgetHours: number;
   hourlyCost: number;
-  materialCost: number;
   progress: number;
   timeEntries: TimeEntry[];
+  materialEntries: MaterialEntry[];
 };
+
+const today = new Date().toISOString().slice(0, 10);
 
 const defaultProject: Project = {
   id: "1",
@@ -27,15 +37,23 @@ const defaultProject: Project = {
   offerAmount: 185000,
   budgetHours: 120,
   hourlyCost: 375,
-  materialCost: 32000,
   progress: 50,
   timeEntries: [
     {
       id: "1",
       employee: "Alex",
-      date: "2026-05-12",
+      date: today,
       hours: 70,
       description: "Demo timer",
+    },
+  ],
+  materialEntries: [
+    {
+      id: "1",
+      supplier: "STARK",
+      date: today,
+      amount: 32000,
+      description: "Demo materialer",
     },
   ],
 };
@@ -46,8 +64,15 @@ export default function Home() {
 
   const [newTime, setNewTime] = useState({
     employee: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: today,
     hours: 0,
+    description: "",
+  });
+
+  const [newMaterial, setNewMaterial] = useState({
+    supplier: "",
+    date: today,
+    amount: 0,
     description: "",
   });
 
@@ -55,8 +80,8 @@ export default function Home() {
     projects.find((project) => project.id === selectedId) ?? projects[0];
 
   useEffect(() => {
-    const savedProjects = localStorage.getItem("mesteros-projects-v2");
-    const savedSelectedId = localStorage.getItem("mesteros-selected-id-v2");
+    const savedProjects = localStorage.getItem("mesteros-projects-v3");
+    const savedSelectedId = localStorage.getItem("mesteros-selected-id-v3");
 
     if (savedProjects) {
       const parsedProjects = JSON.parse(savedProjects) as Project[];
@@ -66,8 +91,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("mesteros-projects-v2", JSON.stringify(projects));
-    localStorage.setItem("mesteros-selected-id-v2", selectedId);
+    localStorage.setItem("mesteros-projects-v3", JSON.stringify(projects));
+    localStorage.setItem("mesteros-selected-id-v3", selectedId);
   }, [projects, selectedId]);
 
   const usedHours = selectedProject.timeEntries.reduce(
@@ -75,8 +100,12 @@ export default function Home() {
     0
   );
 
-  const actualCost =
-    usedHours * selectedProject.hourlyCost + selectedProject.materialCost;
+  const materialCost = selectedProject.materialEntries.reduce(
+    (sum, entry) => sum + entry.amount,
+    0
+  );
+
+  const actualCost = usedHours * selectedProject.hourlyCost + materialCost;
 
   const expectedTotalCost =
     selectedProject.progress > 0
@@ -120,9 +149,9 @@ export default function Home() {
       offerAmount: 0,
       budgetHours: 0,
       hourlyCost: 375,
-      materialCost: 0,
       progress: 0,
       timeEntries: [],
+      materialEntries: [],
     };
 
     setProjects([...projects, newProject]);
@@ -154,17 +183,14 @@ export default function Home() {
     setProjects((currentProjects) =>
       currentProjects.map((project) =>
         project.id === selectedId
-          ? {
-              ...project,
-              timeEntries: [...project.timeEntries, entry],
-            }
+          ? { ...project, timeEntries: [...project.timeEntries, entry] }
           : project
       )
     );
 
     setNewTime({
       employee: "",
-      date: new Date().toISOString().slice(0, 10),
+      date: today,
       hours: 0,
       description: "",
     });
@@ -177,6 +203,51 @@ export default function Home() {
           ? {
               ...project,
               timeEntries: project.timeEntries.filter(
+                (entry) => entry.id !== entryId
+              ),
+            }
+          : project
+      )
+    );
+  }
+
+  function addMaterialEntry() {
+    if (!newMaterial.supplier || newMaterial.amount <= 0) return;
+
+    const entry: MaterialEntry = {
+      id: Date.now().toString(),
+      supplier: newMaterial.supplier,
+      date: newMaterial.date,
+      amount: Number(newMaterial.amount),
+      description: newMaterial.description,
+    };
+
+    setProjects((currentProjects) =>
+      currentProjects.map((project) =>
+        project.id === selectedId
+          ? {
+              ...project,
+              materialEntries: [...project.materialEntries, entry],
+            }
+          : project
+      )
+    );
+
+    setNewMaterial({
+      supplier: "",
+      date: today,
+      amount: 0,
+      description: "",
+    });
+  }
+
+  function deleteMaterialEntry(entryId: string) {
+    setProjects((currentProjects) =>
+      currentProjects.map((project) =>
+        project.id === selectedId
+          ? {
+              ...project,
+              materialEntries: project.materialEntries.filter(
                 (entry) => entry.id !== entryId
               ),
             }
@@ -242,9 +313,9 @@ export default function Home() {
         </Card>
 
         <Card title="Rediger sag">
-          {(["name", "offerAmount", "budgetHours", "hourlyCost", "materialCost", "progress"] as const).map(
+          {(["name", "offerAmount", "budgetHours", "hourlyCost", "progress"] as const).map(
             (key) => (
-              <label key={key} style={{ display: "block", marginTop: 14 }}>
+              <label key={key} style={labelStyle}>
                 <strong>{labels[key]}</strong>
                 <input
                   value={selectedProject[key]}
@@ -260,6 +331,7 @@ export default function Home() {
 
         <Card title="Økonomi">
           <Metric title="Brugte timer" value={`${usedHours.toLocaleString("da-DK")} timer`} />
+          <Metric title="Materialer" value={`${materialCost.toLocaleString("da-DK")} kr.`} />
           <Metric title="Faktisk forbrug" value={`${actualCost.toLocaleString("da-DK")} kr.`} />
           <Metric title="Forventet slutomkostning" value={`${expectedTotalCost.toLocaleString("da-DK")} kr.`} />
           <Metric title="Forventet resultat" value={`${forecastProfit.toLocaleString("da-DK")} kr.`} />
@@ -334,7 +406,7 @@ export default function Home() {
                 setNewTime({ ...newTime, description: event.target.value })
               }
               style={inputStyle}
-              placeholder="Fx fliser på væg, oprydning, fugearbejde"
+              placeholder="Fx fliser, oprydning, fugearbejde"
             />
           </label>
 
@@ -351,45 +423,115 @@ export default function Home() {
           </button>
         </Card>
 
+        <Card title="Registrer materialer">
+          <label style={labelStyle}>
+            <strong>Leverandør</strong>
+            <input
+              value={newMaterial.supplier}
+              onChange={(event) =>
+                setNewMaterial({ ...newMaterial, supplier: event.target.value })
+              }
+              style={inputStyle}
+              placeholder="Fx STARK, Bygma, AO"
+            />
+          </label>
+
+          <label style={labelStyle}>
+            <strong>Dato</strong>
+            <input
+              type="date"
+              value={newMaterial.date}
+              onChange={(event) =>
+                setNewMaterial({ ...newMaterial, date: event.target.value })
+              }
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={labelStyle}>
+            <strong>Beløb</strong>
+            <input
+              type="number"
+              value={newMaterial.amount}
+              onChange={(event) =>
+                setNewMaterial({
+                  ...newMaterial,
+                  amount: Number(event.target.value),
+                })
+              }
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={labelStyle}>
+            <strong>Beskrivelse</strong>
+            <input
+              value={newMaterial.description}
+              onChange={(event) =>
+                setNewMaterial({
+                  ...newMaterial,
+                  description: event.target.value,
+                })
+              }
+              style={inputStyle}
+              placeholder="Fx fliseklæb, membran, beton"
+            />
+          </label>
+
+          <button
+            onClick={addMaterialEntry}
+            style={{
+              ...buttonStyle,
+              marginTop: 18,
+              background: "#111827",
+              color: "white",
+            }}
+          >
+            Gem materialer
+          </button>
+        </Card>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 24,
+          maxWidth: 1400,
+          marginTop: 24,
+        }}
+      >
         <Card title="Timeliste for valgt sag">
           {selectedProject.timeEntries.length === 0 ? (
             <p>Ingen timer registreret endnu.</p>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
               {selectedProject.timeEntries.map((entry) => (
-                <div
+                <EntryCard
                   key={entry.id}
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    background: "#f4f4f5",
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto",
-                    gap: 12,
-                  }}
-                >
-                  <div>
-                    <strong>{entry.employee}</strong>
-                    <p style={{ margin: "4px 0" }}>
-                      {entry.date} · {entry.hours} timer
-                    </p>
-                    <p style={{ margin: 0, color: "#52525b" }}>
-                      {entry.description || "Ingen beskrivelse"}
-                    </p>
-                  </div>
+                  title={entry.employee}
+                  subtitle={`${entry.date} · ${entry.hours} timer`}
+                  description={entry.description || "Ingen beskrivelse"}
+                  onDelete={() => deleteTimeEntry(entry.id)}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
 
-                  <button
-                    onClick={() => deleteTimeEntry(entry.id)}
-                    style={{
-                      ...buttonStyle,
-                      width: "auto",
-                      background: "#fee2e2",
-                      color: "#991b1b",
-                    }}
-                  >
-                    Slet
-                  </button>
-                </div>
+        <Card title="Materialeliste for valgt sag">
+          {selectedProject.materialEntries.length === 0 ? (
+            <p>Ingen materialer registreret endnu.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {selectedProject.materialEntries.map((entry) => (
+                <EntryCard
+                  key={entry.id}
+                  title={entry.supplier}
+                  subtitle={`${entry.date} · ${entry.amount.toLocaleString("da-DK")} kr.`}
+                  description={entry.description || "Ingen beskrivelse"}
+                  onDelete={() => deleteMaterialEntry(entry.id)}
+                />
               ))}
             </div>
           )}
@@ -423,6 +565,49 @@ function Metric({ title, value }: { title: string; value: string }) {
   );
 }
 
+function EntryCard({
+  title,
+  subtitle,
+  description,
+  onDelete,
+}: {
+  title: string;
+  subtitle: string;
+  description: string;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      style={{
+        padding: 12,
+        borderRadius: 10,
+        background: "#f4f4f5",
+        display: "grid",
+        gridTemplateColumns: "1fr auto",
+        gap: 12,
+      }}
+    >
+      <div>
+        <strong>{title}</strong>
+        <p style={{ margin: "4px 0" }}>{subtitle}</p>
+        <p style={{ margin: 0, color: "#52525b" }}>{description}</p>
+      </div>
+
+      <button
+        onClick={onDelete}
+        style={{
+          ...buttonStyle,
+          width: "auto",
+          background: "#fee2e2",
+          color: "#991b1b",
+        }}
+      >
+        Slet
+      </button>
+    </div>
+  );
+}
+
 const buttonStyle = {
   width: "100%",
   padding: 10,
@@ -449,6 +634,5 @@ const labels: Record<string, string> = {
   offerAmount: "Tilbudssum",
   budgetHours: "Budgettimer",
   hourlyCost: "Timekost",
-  materialCost: "Materialer",
   progress: "Færdiggrad %",
 };
