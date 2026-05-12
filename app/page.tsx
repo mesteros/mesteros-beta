@@ -1,5 +1,5 @@
 "use client";
-
+import { supabase } from "./lib/supabase";
 import { useEffect, useState } from "react";
 
 type TimeEntry = {
@@ -120,7 +120,16 @@ export default function Home() {
 
   const selectedProject =
     projects.find((project) => project.id === selectedId) ?? projects[0];
+useEffect(() => {
+  async function testConnection() {
+    const { data, error } = await supabase.from("projects").select("*");
 
+    console.log("SUPABASE DATA:", data);
+    console.log("SUPABASE ERROR:", error);
+  }
+
+  testConnection();
+}, []);
   useEffect(() => {
     const savedProjects = localStorage.getItem("mesteros-projects-v4");
     const savedSelectedId = localStorage.getItem("mesteros-selected-id-v4");
