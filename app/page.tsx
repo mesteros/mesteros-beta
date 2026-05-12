@@ -29,6 +29,17 @@ type Project = {
   materialEntries: MaterialEntry[];
 };
 
+type ProjectEconomy = {
+  usedHours: number;
+  materialCost: number;
+  actualCost: number;
+  expectedTotalCost: number;
+  forecastProfit: number;
+  margin: number;
+  status: string;
+  statusColor: string;
+};
+
 const today = new Date().toISOString().slice(0, 10);
 
 const defaultProject: Project = {
@@ -58,6 +69,37 @@ const defaultProject: Project = {
   ],
 };
 
+function calculateEconomy(project: Project): ProjectEconomy {
+  const usedHours = project.timeEntries.reduce((sum, entry) => sum + entry.hours, 0);
+  const materialCost = project.materialEntries.reduce((sum, entry) => sum + entry.amount, 0);
+  const actualCost = usedHours * project.hourlyCost + materialCost;
+
+  const expectedTotalCost =
+    project.progress > 0 ? actualCost / (project.progress / 100) : 0;
+
+  const forecastProfit = project.offerAmount - expectedTotalCost;
+
+  const margin =
+    project.offerAmount > 0 ? (forecastProfit / project.offerAmount) * 100 : 0;
+
+  const status =
+    margin < 10 ? "RØD - kritisk" : margin < 25 ? "GUL - hold øje" : "GRØN - sund sag";
+
+  const statusColor =
+    margin < 10 ? "#dc2626" : margin < 25 ? "#ca8a04" : "#16a34a";
+
+  return {
+    usedHours,
+    materialCost,
+    actualCost,
+    expectedTotalCost,
+    forecastProfit,
+    margin,
+    status,
+    statusColor,
+  };
+}
+
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([defaultProject]);
   const [selectedId, setSelectedId] = useState("1");
@@ -80,8 +122,8 @@ export default function Home() {
     projects.find((project) => project.id === selectedId) ?? projects[0];
 
   useEffect(() => {
-    const savedProjects = localStorage.getItem("mesteros-projects-v3");
-    const savedSelectedId = localStorage.getItem("mesteros-selected-id-v3");
+    const savedProjects = localStorage.getItem("mesteros-projects-v4");
+    const savedSelectedId = localStorage.getItem("mesteros-selected-id-v4");
 
     if (savedProjects) {
       const parsedProjects = JSON.parse(savedProjects) as Project[];
@@ -91,43 +133,34 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("mesteros-projects-v3", JSON.stringify(projects));
-    localStorage.setItem("mesteros-selected-id-v3", selectedId);
+    localStorage.setItem("mesteros-projects-v4", JSON.stringify(projects));
+    localStorage.setItem("mesteros-selected-id-v4", selectedId);
   }, [projects, selectedId]);
 
-  const usedHours = selectedProject.timeEntries.reduce(
-    (sum, entry) => sum + entry.hours,
+  const selectedEconomy = calculateEconomy(selectedProject);
+
+  const totalOfferAmount = projects.reduce(
+    (sum, project) => sum + project.offerAmount,
     0
   );
 
-  const materialCost = selectedProject.materialEntries.reduce(
-    (sum, entry) => sum + entry.amount,
+  const totalForecastProfit = projects.reduce(
+    (sum, project) => sum + calculateEconomy(project).forecastProfit,
     0
   );
 
-  const actualCost = usedHours * selectedProject.hourlyCost + materialCost;
+  const redProjects = projects.filter(
+    (project) => calculateEconomy(project).margin < 10
+  ).length;
 
-  const expectedTotalCost =
-    selectedProject.progress > 0
-      ? actualCost / (selectedProject.progress / 100)
-      : 0;
+  const yellowProjects = projects.filter((project) => {
+    const margin = calculateEconomy(project).margin;
+    return margin >= 10 && margin < 25;
+  }).length;
 
-  const forecastProfit = selectedProject.offerAmount - expectedTotalCost;
-
-  const margin =
-    selectedProject.offerAmount > 0
-      ? (forecastProfit / selectedProject.offerAmount) * 100
-      : 0;
-
-  const status =
-    margin < 10
-      ? "RØD - kritisk"
-      : margin < 25
-      ? "GUL - hold øje"
-      : "GRØN - sund sag";
-
-  const statusColor =
-    margin < 10 ? "#dc2626" : margin < 25 ? "#ca8a04" : "#16a34a";
+  const greenProjects = projects.filter(
+    (project) => calculateEconomy(project).margin >= 25
+  ).length;
 
   function updateProjectField(field: keyof Project, value: string) {
     setProjects((currentProjects) =>
@@ -271,6 +304,31 @@ export default function Home() {
       <section
         style={{
           display: "grid",
+          gridTemplateColumns: "repeat(5, 1fr)",
+          gap: 16,
+          maxWidth: 1400,
+          marginBottom: 24,
+        }}
+      >
+        <DashboardCard title="Antal sager" value={projects.length.toString()} />
+        <DashboardCard
+          title="Samlet tilbudssum"
+          value={`${totalOfferAmount.toLocaleString("da-DK")} kr.`}
+        />
+        <DashboardCard
+          title="Forventet resultat"
+          value={`${totalForecastProfit.toLocaleString("da-DK")} kr.`}
+        />
+        <DashboardCard title="Røde / gule / grønne" value={`${redProjects} / ${yellowProjects} / ${greenProjects}`} />
+        <DashboardCard
+          title="Valgt sag margin"
+          value={`${selectedEconomy.margin.toFixed(1)}%`}
+        />
+      </section>
+
+      <section
+        style={{
+          display: "grid",
           gridTemplateColumns: "240px 1fr 1fr",
           gap: 24,
           maxWidth: 1400,
@@ -282,21 +340,26 @@ export default function Home() {
           </button>
 
           <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => setSelectedId(project.id)}
-                style={{
-                  ...buttonStyle,
-                  background:
-                    project.id === selectedId ? "#111827" : "#e5e7eb",
-                  color: project.id === selectedId ? "white" : "#111827",
-                  textAlign: "left",
-                }}
-              >
-                {project.name}
-              </button>
-            ))}
+            {projects.map((project) => {
+              const economy = calculateEconomy(project);
+
+              return (
+                <button
+                  key={project.id}
+                  onClick={() => setSelectedId(project.id)}
+                  style={{
+                    ...buttonStyle,
+                    background:
+                      project.id === selectedId ? "#111827" : "#e5e7eb",
+                    color: project.id === selectedId ? "white" : "#111827",
+                    textAlign: "left",
+                    borderLeft: `8px solid ${economy.statusColor}`,
+                  }}
+                >
+                  {project.name}
+                </button>
+              );
+            })}
           </div>
 
           <button
@@ -330,24 +393,24 @@ export default function Home() {
         </Card>
 
         <Card title="Økonomi">
-          <Metric title="Brugte timer" value={`${usedHours.toLocaleString("da-DK")} timer`} />
-          <Metric title="Materialer" value={`${materialCost.toLocaleString("da-DK")} kr.`} />
-          <Metric title="Faktisk forbrug" value={`${actualCost.toLocaleString("da-DK")} kr.`} />
-          <Metric title="Forventet slutomkostning" value={`${expectedTotalCost.toLocaleString("da-DK")} kr.`} />
-          <Metric title="Forventet resultat" value={`${forecastProfit.toLocaleString("da-DK")} kr.`} />
-          <Metric title="Margin" value={`${margin.toFixed(1)}%`} />
+          <Metric title="Brugte timer" value={`${selectedEconomy.usedHours.toLocaleString("da-DK")} timer`} />
+          <Metric title="Materialer" value={`${selectedEconomy.materialCost.toLocaleString("da-DK")} kr.`} />
+          <Metric title="Faktisk forbrug" value={`${selectedEconomy.actualCost.toLocaleString("da-DK")} kr.`} />
+          <Metric title="Forventet slutomkostning" value={`${selectedEconomy.expectedTotalCost.toLocaleString("da-DK")} kr.`} />
+          <Metric title="Forventet resultat" value={`${selectedEconomy.forecastProfit.toLocaleString("da-DK")} kr.`} />
+          <Metric title="Margin" value={`${selectedEconomy.margin.toFixed(1)}%`} />
 
           <div
             style={{
               marginTop: 24,
               padding: 18,
               borderRadius: 12,
-              background: statusColor,
+              background: selectedEconomy.statusColor,
               color: "white",
               fontWeight: "bold",
             }}
           >
-            Status: {status}
+            Status: {selectedEconomy.status}
           </div>
         </Card>
       </section>
@@ -538,6 +601,15 @@ export default function Home() {
         </Card>
       </section>
     </main>
+  );
+}
+
+function DashboardCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div style={{ background: "white", padding: 18, borderRadius: 16 }}>
+      <p style={{ margin: 0, color: "#52525b" }}>{title}</p>
+      <h2 style={{ margin: "8px 0 0" }}>{value}</h2>
+    </div>
   );
 }
 
