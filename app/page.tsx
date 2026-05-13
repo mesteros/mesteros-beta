@@ -3,61 +3,54 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔑 Supabase setup
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// TYPES
 type Project = {
   id: string;
   name: string;
-  offerAmount: number;
-  budgetHours: number;
-  hourlyCost: number;
+  offer_amount: number;
+  budget_hours: number;
+  hourly_cost: number;
   progress: number;
 };
 
-// DEFAULT DATA (fallback hvis DB er tom)
 const defaultProject: Project = {
   id: "1",
   name: "Badeværelse Hellerup",
-  offerAmount: 185000,
-  budgetHours: 120,
-  hourlyCost: 375,
+  offer_amount: 185000,
+  budget_hours: 120,
+  hourly_cost: 375,
   progress: 50,
 };
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([defaultProject]);
 
-  // 🔥 Supabase test
   useEffect(() => {
     async function loadProjects() {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*");
+      const { data, error } = await supabase.from("projects").select("*");
 
       console.log("SUPABASE DATA:", data);
       console.log("SUPABASE ERROR:", error);
 
       if (data && data.length > 0) {
-        setProjects(data);
+        setProjects(data as Project[]);
       }
     }
 
     loadProjects();
   }, []);
 
-  const project = projects[0];
+  const project = projects[0] ?? defaultProject;
 
-  // BEREGNINGER
-  const usedHours = project.progress / 100 * project.budgetHours;
-  const laborCost = usedHours * project.hourlyCost;
-  const totalCost = laborCost;
-  const profit = project.offerAmount - totalCost;
-  const margin = (profit / project.offerAmount) * 100;
+  const usedHours = (project.progress / 100) * project.budget_hours;
+  const cost = usedHours * project.hourly_cost;
+  const result = project.offer_amount - cost;
+  const margin =
+    project.offer_amount > 0 ? (result / project.offer_amount) * 100 : 0;
 
   return (
     <main style={{ padding: 40, fontFamily: "Arial" }}>
@@ -66,8 +59,8 @@ export default function Home() {
 
       <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
         <div>Antal sager: {projects.length}</div>
-        <div>Tilbud: {project.offerAmount.toLocaleString()} kr.</div>
-        <div>Resultat: {profit.toLocaleString()} kr.</div>
+        <div>Tilbud: {project.offer_amount.toLocaleString("da-DK")} kr.</div>
+        <div>Resultat: {result.toLocaleString("da-DK")} kr.</div>
         <div>Margin: {margin.toFixed(1)}%</div>
       </div>
 
@@ -75,18 +68,16 @@ export default function Home() {
         <h2>{project.name}</h2>
 
         <p>Brugte timer: {usedHours.toFixed(1)}</p>
-        <p>Budget timer: {project.budgetHours}</p>
-        <p>Timepris: {project.hourlyCost} kr</p>
-
-        <p>Omkostning: {totalCost.toLocaleString()} kr.</p>
-        <p>Fortjeneste: {profit.toLocaleString()} kr.</p>
+        <p>Budget timer: {project.budget_hours}</p>
+        <p>Timepris: {project.hourly_cost.toLocaleString("da-DK")} kr</p>
+        <p>Omkostning: {cost.toLocaleString("da-DK")} kr.</p>
+        <p>Fortjeneste: {result.toLocaleString("da-DK")} kr.</p>
 
         <div
           style={{
             marginTop: 20,
             padding: 15,
-            background:
-              margin > 20 ? "green" : margin > 10 ? "orange" : "red",
+            background: margin > 20 ? "green" : margin > 10 ? "orange" : "red",
             color: "white",
           }}
         >
